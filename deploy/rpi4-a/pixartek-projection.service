@@ -1,0 +1,24 @@
+[Unit]
+Description=PIXARTEK Projection Node
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/pixartek/nodes/projection
+
+# Disable DPMS and screensaver before launching
+ExecStartPre=/bin/bash -c 'DISPLAY=:0 xset -dpms; DISPLAY=:0 xset s off; DISPLAY=:0 xset s noblank'
+
+ExecStart=/home/pi/pixartek/nodes/projection/.venv/bin/python main.py
+Restart=always
+RestartSec=3
+
+Environment=DEV_MODE=false
+Environment=MQTT_HOST=192.168.86.243
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/pi/.Xauthority
+
+[Install]
+WantedBy=multi-user.target

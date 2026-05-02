@@ -1,0 +1,22 @@
+[Unit]
+Description=PIXARTEK Projection Node (RPi4-B)
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/pixartek/nodes/projection
+ExecStart=/home/pi/pixartek/nodes/projection/.venv/bin/python main.py
+Restart=always
+RestartSec=3
+Environment=DEV_MODE=false
+Environment=MQTT_HOST=192.168.100.102
+Environment=NODE_ID=rpi4-projection
+Environment=IMAGES_DIR=/home/pi/pixartek/assets/artwork
+Environment=DISPLAY_W=1280
+Environment=DISPLAY_H=720
+Environment=DISPLAY=:0
+
+[Install]
+WantedBy=multi-user.target

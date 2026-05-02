@@ -1,0 +1,19 @@
+[Unit]
+Description=PIXARTEK Vision Node
+After=network.target mosquitto.service
+Wants=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/pixartek/nodes/vision
+ExecStart=/home/pi/pixartek/nodes/vision/.venv/bin/python main.py
+Restart=always
+RestartSec=3
+Environment=DEV_MODE=false
+Environment=MQTT_HOST=192.168.86.243
+Environment=NODE_ID=rpi4-vision
+Environment=ASSETS_DIR=/home/pi/pixartek/frontend/public/artworks
+
+[Install]
+WantedBy=multi-user.target
