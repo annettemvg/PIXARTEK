@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pixartek — Control Proyección</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: sans-serif; background: #f5f0e8; display: flex; flex-direction: column; align-items: center; min-height: 100vh; padding: 20px; }
+  h1 { font-size: 1.2rem; margin-bottom: 6px; color: #1a1a2e; }
+  #status { padding: 6px 16px; border-radius: 20px; font-size: 0.85rem; background: #e8e4dc; color: #888; margin-bottom: 20px; }
+  #status.ok { background: #d1fae5; color: #065f46; }
+  #status.err { background: #fee2e2; color: #991b1b; }
+  .section { margin-bottom: 18px; text-align: center; }
+  .label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 2px; color: #888; margin-bottom: 8px; }
+  .row { display: flex; gap: 8px; justify-content: center; align-items: center; }
+  button {
+    width: 72px; height: 72px; border-radius: 16px; border: none; font-size: 1.6rem;
+    font-weight: 800; cursor: pointer; transition: transform 0.1s, opacity 0.1s;
+    active: scale(0.95);
+  }
+  button:active { transform: scale(0.92); opacity: 0.8; }
+  .coral { background: #e05c5c; color: white; }
+  .ink   { background: #1a1a2e; color: white; }
+  .teal  { background: #0d9488; color: white; }
+  .center-pad { width: 72px; height: 72px; background: white; border-radius: 16px; border: 2px solid #ddd; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; color: #ccc; }
+  .reset-btn { padding: 12px 32px; border-radius: 16px; background: white; border: 2px solid #ddd; color: #888; font-size: 0.95rem; cursor: pointer; width: 100%; max-width: 280px; }
+  input[type=range] { width: 100%; max-width: 280px; accent-color: #0d9488; height: 8px; cursor: pointer; }
+  .angle-row { display: flex; justify-content: space-between; width: 100%; max-width: 280px; font-size: 0.8rem; color: #888; margin-top: 4px; }
+  .angle-val { font-weight: 700; color: #1a1a2e; }
+  .squeeze-row { display: flex; gap: 8px; justify-content: center; }
+  .sm { width: 56px; height: 56px; font-size: 1.1rem; }
+</style>
+</head>
+<body>
+<h1>🎯 Control de Proyección</h1>
+<div id="status">listo</div>
+
+<!-- ZOOM -->
+<div class="section">
+  <div class="label">Zoom</div>
+  <div class="row">
+    <button class="coral" onclick="send('zoom_out')">−</button>
+    <button class="coral" onclick="send('zoom_in')">+</button>
+  </div>
+</div>
+
+<!-- SQUEEZE (horizontal / vertical scale) -->
+<div class="section">
+  <div class="label">Ajuste proporciones</div>
+  <div class="squeeze-row">
+    <button class="teal sm" onclick="send('squeeze_h')" title="Más estrecho">⟺−</button>
+    <button class="teal sm" onclick="send('expand_h')" title="Más ancho">⟺+</button>
+    <button class="teal sm" onclick="send('squeeze_v')" title="Más bajo">↕−</button>
+    <button class="teal sm" onclick="send('expand_v')" title="Más alto">↕+</button>
+  </div>
+</div>
+
+<!-- D-PAD -->
+<div class="section">
+  <div class="label">Posición — Normal</div>
+  <div style="display:flex; flex-direction:column; align-items:center; gap:0;">
+    <button class="ink" onclick="send('up')">▲</button>
+    <div class="row" style="gap:0;">
+      <button class="ink" onclick="send('left')">◀</button>
+      <div class="center-pad">✛</div>
+      <button class="ink" onclick="send('right')">▶</button>
+    </div>
+    <button class="ink" onclick="send('down')">▼</button>
+  </div>
+</div>
+
+<!-- FINE D-PAD -->
+<div class="section">
+  <div class="label">Posición — Precisión 1px</div>
+  <div style="display:flex; flex-direction:column; align-items:center; gap:0;">
+    <button class="teal sm" onclick="send('up_fine')">▲</button>
+    <div class="row" style="gap:0;">
+      <button class="teal sm" onclick="send('left_fine')">◀</button>
+      <div class="center-pad" style="width:56px;height:56px;font-size:0.9rem;">1px</div>
+      <button class="teal sm" onclick="send('right_fine')">▶</button>
+    </div>
+    <button class="teal sm" onclick="send('down_fine')">▼</button>
+  </div>
+</div>
+
+<!-- ROTATION -->
+<div class="section">
+  <div class="label">Rotación — <span class="angle-val" id="angle-val">0°</span></div>
+  <input type="range" id="angle" min="-45" max="45" step="0.5" value="0" oninput="onAngle(this.value)">
+  <div class="angle-row">
+    <span>−45°</span>
+    <button style="background:none;border:none;color:#e05c5c;cursor:pointer;font-size:0.85rem;" onclick="resetAngle()">centrar</button>
+    <span>+45°</span>
+  </div>
+</div>
+
+<!-- RESET -->
+<div class="section">
+  <button class="reset-btn" onclick="resetAll()">↺ Restablecer todo</button>
+</div>
+
+<script>
+const BASE = `http://${location.hostname}:8000`;
+let busy = false;
+let angleTimer = null;
+
+function setStatus(msg, type) {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = type || '';
+  if (type === 'ok') setTimeout(() => { el.textContent = 'listo'; el.className = ''; }, 800);
+}
+
+async function send(action) {
+  if (busy) return;
+  busy = true;
+  setStatus('enviando…');
+  try {
+    const r = await fetch(`${BASE}/api/projection/adjust`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({action})
+    });
+    const d = await r.json();
+    setStatus('✓ ' + action, 'ok');
+  } catch(e) {
+    setStatus('⚠ sin conexión', 'err');
+  }
+  busy = false;
+}
+
+function onAngle(val) {
+  document.getElementById('angle-val').textContent = val + '°';
+  clearTimeout(angleTimer);
+  angleTimer = setTimeout(async () => {
+    try {
+      await fetch(`${BASE}/api/projection/angle`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({angle: parseFloat(val)})
+      });
+      setStatus('✓ ' + val + '°', 'ok');
+    } catch(e) { setStatus('⚠ sin conexión', 'err'); }
+  }, 80);
+}
+
+function resetAngle() {
+  document.getElementById('angle').value = 0;
+  document.getElementById('angle-val').textContent = '0°';
+  onAngle(0);
+}
+
+function resetAll() {
+  resetAngle();
+  send('reset');
+}
+
+// Keyboard shortcuts
+document.addEventListener('keydown', e => {
+  const map = {ArrowUp:'up', ArrowDown:'down', ArrowLeft:'left', ArrowRight:'right', '+':'zoom_in', '=':'zoom_in', '-':'zoom_out', 'r':'reset', 'R':'reset'};
+  if (map[e.key]) { e.preventDefault(); send(map[e.key]); }
+});
+</script>
+</body>
+</html>

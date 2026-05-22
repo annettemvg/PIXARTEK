@@ -1,0 +1,5 @@
+paho-mqtt==2.1.0
+Pillow==10.3.0
+pygame==2.5.2        # dev mode display (remove on RPi if using feh)
+# RPi production only:
+# opencv-python-headless==4.9.0.80

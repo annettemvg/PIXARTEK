@@ -1,0 +1,25 @@
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy.orm import DeclarativeBase
+from app.core.config import settings
+
+engine = create_async_engine(settings.db_url, echo=False)
+AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+async def get_db() -> AsyncSession:
+    async with AsyncSessionLocal() as session:
+        yield session
+
+
+async def init_db():
+    # Import all models so Base.metadata knows about them
+    import app.models.artwork       # noqa
+    import app.models.session       # noqa
+    import app.models.artwork_stage # noqa
+    import app.models.user          # noqa
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
