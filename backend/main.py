@@ -10,7 +10,8 @@ from app.core.config import settings
 from app.db.base import init_db, AsyncSessionLocal
 from app.db.seed import seed_artworks
 from app.mqtt.client import start_mqtt, stop_mqtt, set_event_loop
-from app.api.routes import artworks, sessions, hardware, ws, config, stages, vision
+from app.api.routes import artworks, sessions, hardware, ws, config, stages, vision, projection, chat, users, tts
+from app.core.monitor import monitor_loop, set_broadcast
 
 logging.basicConfig(level=logging.INFO)
 
@@ -22,6 +23,9 @@ async def lifespan(app: FastAPI):
         await seed_artworks(db)
     set_event_loop(asyncio.get_event_loop())
     start_mqtt()
+    from app.api.routes.ws import _broadcast_to_ws
+    set_broadcast(_broadcast_to_ws)
+    asyncio.create_task(monitor_loop())
     yield
     stop_mqtt()
 
@@ -41,6 +45,10 @@ app.include_router(hardware.router, prefix="/api")
 app.include_router(config.router, prefix="/api")
 app.include_router(stages.router, prefix="/api")
 app.include_router(vision.router, prefix="/api")
+app.include_router(projection.router, prefix="/api")
+app.include_router(chat.router, prefix="/api")
+app.include_router(users.router, prefix="/api")
+app.include_router(tts.router, prefix="/api")
 app.include_router(ws.router)
 
 

@@ -13,9 +13,18 @@ class Settings(BaseSettings):
     # Database
     db_url: str = "sqlite+aiosqlite:///./pixartek.db"
 
+    # Nodos RPi
+    rpi4a_ip: str = "192.168.0.198"
+
     # API
     api_host: str = "0.0.0.0"
     api_port: int = 8000
+
+    # Gemini
+    gemini_api_key: str = ""
+
+    # OpenAI
+    openai_api_key: str = ""
 
     class Config:
         env_file = ".env"

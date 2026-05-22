@@ -1,0 +1,630 @@
+# PIXARTEK — Diagrama de Bloques (Block Diagram)
+
+## 1. DIAGRAMA GENERAL DEL SISTEMA
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            PIXARTEK SYSTEM ARCHITECTURE                      │
+│                                                                               │
+│  ┌──────────────────────────────────────┐  ┌────────────────────────────┐   │
+│  │     RPI5 - MAIN SYSTEM (Principal)   │  │   MQTT BROKER (Mosquitto)  │   │
+│  │     192.168.86.243                   │  │   Port: 1883               │   │
+│  │                                      │  │                            │   │
+│  │  ┌────────────────────────────────┐ │  │  ┌──────────────────────┐ │   │
+│  │  │   BACKEND (FastAPI)            │ │  │  │  Message Broker      │ │   │
+│  │  │   Port: 8000                   │ │◄─┼─►│  Topics:             │ │   │
+│  │  │                                │ │  │  │  - projection/cmd    │ │   │
+│  │  │  Routes:                       │ │  │  │  - vision/feedback   │ │   │
+│  │  │  • /api/artworks               │ │  │  │  - vision/metrics    │ │   │
+│  │  │  • /api/sessions               │ │  │  └──────────────────────┘ │   │
+│  │  │  • /api/stages                 │ │  │                            │   │
+│  │  │  • /api/hardware/dispense      │ │  └────────────────────────────┘   │
+│  │  │  • /api/vision                 │ │            ▲                       │
+│  │  │  • /api/config                 │ │            │                       │
+│  │  │  • /ws (WebSocket)             │ │      MQTT Pub/Sub                 │
+│  │  │                                │ │            │                       │
+│  │  │  Dependencies:                 │ │            ▼                       │
+│  │  │  ├─ SQLite Database            │ │  ┌────────────────────────────┐   │
+│  │  │  ├─ MQTT Client                │ │  │   RPI4-B (Vision Node)     │   │
+│  │  │  └─ WebSocket Handler          │ │  │   192.168.86.244           │   │
+│  │  └────────────────────────────────┘ │  │                            │   │
+│  │                                      │  │  ┌──────────────────────┐ │   │
+│  │  ┌────────────────────────────────┐ │  │  │ Vision Analyzer      │ │   │
+│  │  │   FRONTEND (Next.js)           │ │  │  │ (nodes/vision/)      │ │   │
+│  │  │   Port: 3000                   │ │  │  │                      │ │   │
+│  │  │                                │ │  │  │ • Image Capture      │ │   │
+│  │  │  Pages:                        │ │  │  │ • OpenCV Analysis    │ │   │
+│  │  │  • /catalog (Artwork List)     │ │  │  │ • Feedback Gen       │ │   │
+│  │  │  • /session (Painting Screen)  │ │  │  │ • MQTT Pub           │ │   │
+│  │  │  • /settings                   │ │  │  └──────────────────────┘ │   │
+│  │  │  • /welcome                    │ │  │            ▲                │   │
+│  │  │                                │ │  │            │                │   │
+│  │  │  Components:                   │ │  │            ▼                │   │
+│  │  │  ├─ FeedbackOverlay            │ │  │  ┌──────────────────────┐ │   │
+│  │  │  ├─ CameraLiveFeed             │◄─┼─►│  📷 USB Camera       │ │   │
+│  │  │  ├─ HardwareControls           │ │  │  └──────────────────────┘ │   │
+│  │  │  ├─ FeedbackPanel              │ │  │                            │   │
+│  │  │  └─ VisionAnalysisModal        │ │  └────────────────────────────┘   │
+│  │  │                                │ │                                    │
+│  │  │  Communication:                │ │  ┌────────────────────────────┐   │
+│  │  │  ├─ REST API (Backend)         │ │  │   RPI4-A (Projection)      │   │
+│  │  │  └─ WebSocket (Real-time)      │ │  │   192.168.86.245           │   │
+│  │  └────────────────────────────────┘ │  │                            │   │
+│  │                                      │  │  ┌──────────────────────┐ │   │
+│  │  ┌────────────────────────────────┐ │  │  │ Projection Control   │ │   │
+│  │  │   Database (SQLite)            │ │  │  │ (nodes/projection/)  │ │   │
+│  │  │                                │ │  │  │                      │ │   │
+│  │  │  Tables:                       │ │  │  │ • MQTT Sub           │ │   │
+│  │  │  • artworks (metadata)         │ │  │  │ • Projector Driver   │ │   │
+│  │  │  • artwork_stages (stages)     │ │  │  │                      │ │   │
+│  │  │  • sessions (user sessions)    │ │  │  └──────────────────────┘ │   │
+│  │  │  • session_metrics (feedback)  │ │  │            ▲                │   │
+│  │  └────────────────────────────────┘ │  │            │                │   │
+│  │                                      │  │            ▼                │   │
+│  └──────────────────────────────────────┘  │  ┌──────────────────────┐ │   │
+│                                             │  │ 🖼️  Projector       │ │   │
+│  ┌──────────────────────────────────────┐  │  │ Display Reference   │ │   │
+│  │  HARDWARE PERIPHERALS (RPI5)         │  │  └──────────────────────┘ │   │
+│  │                                      │  │                            │   │
+│  │  ┌──────────────────────────────┐  │  └────────────────────────────┘   │
+│  │  │ 💧 Pigment Dispenser         │  │                                    │
+│  │  │ (GPIO + Motor Control)       │  │                                    │
+│  │  └──────────────────────────────┘  │                                    │
+│  │                                      │                                    │
+│  └──────────────────────────────────────┘                                  │
+│                                                                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 2. DIAGRAMA DE CAPAS DEL SISTEMA
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        PRESENTATION LAYER                        │
+│  (Web UI - Next.js React Components on RPI5 Port 3000)          │
+│                                                                   │
+│  Catalog Page │ Session Page │ Settings │ Welcome │ Components  │
+│  (Browse)     │ (Paint)      │ (Config) │ (Intro) │ (UI/Feedback)
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+           ┌───────────────┼───────────────┐
+           │ REST API      │ WebSocket     │ Real-time
+           │ (JSON/HTTP)   │ (Raw MQTT msg)│ Feedback
+           │               │               │
+           ▼               ▼               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      APPLICATION LAYER                           │
+│            (FastAPI Backend on RPI5 Port 8000)                  │
+│                                                                   │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────┐       │
+│  │ Artworks │ │ Sessions │ │ Hardware │ │   Vision     │       │
+│  │ Router   │ │ Router   │ │ Router   │ │   Router     │       │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────────┘       │
+│                                                                   │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │  Business Logic Layer                                    │   │
+│  │  • Session Management                                    │   │
+│  │  • Stage Progression                                     │   │
+│  │  • Metric Recording                                      │   │
+│  │  • MQTT Message Publishing                               │   │
+│  └─────────────────────────────────────────────────────────┘   │
+└──────────────┬──────────────┬──────────────┬───────────────────┘
+               │              │              │
+    MQTT Sub   │              │    DB Query  │  GPIO Control
+    Pub        │              │              │
+               ▼              ▼              ▼
+┌──────────────────────────────────────────────────────────────┐
+│                     DATA ACCESS LAYER                          │
+│                                                                │
+│  ┌──────────────┐  ┌────────────┐  ┌──────────────────┐     │
+│  │ SQLite DB    │  │ MQTT Client │  │ GPIO/Hardware    │     │
+│  │ • Artworks   │  │ • Pub/Sub   │  │ • Dispenser      │     │
+│  │ • Sessions   │  │ • Topics    │  │ • Motor Control  │     │
+│  │ • Metrics    │  │ • Payload   │  │                  │     │
+│  └──────────────┘  └────────────┘  └──────────────────┘     │
+└──────────────┬──────────────┬──────────────┬─────────────────┘
+               │              │              │
+        ┌──────▼──────┬───────▼──────┬──────▼──────┐
+        │             │              │             │
+        ▼             ▼              ▼             ▼
+    ┌───────┐    ┌─────────┐    ┌───────┐    ┌──────────┐
+    │  File │    │  MQTT   │    │ Vision│    │  Pigment │
+    │System │    │ Broker  │    │  Node │    │Dispenser │
+    │       │    │         │    │       │    │          │
+    └───────┘    └─────────┘    └───────┘    └──────────┘
+```
+
+---
+
+## 3. DIAGRAMA DE FLUJO DE COMUNICACIÓN
+
+```
+USER INTERACTION FLOW:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+┌──────────┐
+│  User    │
+│  Opens   │  1. Selects Artwork
+│ Browser  │     from Catalog
+└─────┬────┘
+      │ (REST GET /api/artworks)
+      ▼
+┌───────────────────────────────────────────┐
+│  Frontend                                 │
+│  • Fetches artwork list                   │
+│  • Displays catalog page                  │
+│  • User clicks "Start"                    │
+└─────┬───────────────────────────────────────┘
+      │ (REST POST /api/sessions)
+      │ {artwork_id, start_stage, total_stages}
+      ▼
+┌───────────────────────────────────────────┐
+│  Backend                                  │
+│  • Creates session                        │
+│  • Returns session_id                     │
+│  • Prepares to publish projection cmd     │
+└─────┬───────────────────────────────────────┘
+      │ 2. Publishes Projection Command
+      │ (MQTT: pixartek/projection/command)
+      │ {artwork_id, stage, image_path, ...}
+      │
+      ├─────────────────┬───────────────────────┐
+      │                 │                       │
+      ▼                 ▼                       ▼
+   ┌─────────┐   ┌────────────────┐   ┌──────────────────┐
+   │ RPI4-B  │   │   MQTT Broker  │   │   Frontend      │
+   │ Vision  │   │   (Mosquitto)  │   │   (WebSocket)   │
+   │ Node    │   │                │   │                 │
+   └─────────┘   └────────────────┘   └──────────────────┘
+      │                                        ▲
+      │ 3. Loads Reference Image                │ (WebSocket broadcast)
+      │    from file path                       │
+      │                                        │
+      ├─ Initializes Camera                    │
+      │                                        │
+      │ 4. Capture Frame (every ~2 sec)        │
+      │    └─ Compare vs Reference              │
+      │    └─ Calculate Metrics:                │
+      │       • precision_pct                   │
+      │       • color_deviation                 │
+      │       • stroke_errors[]                 │
+      │       • suggestions[]                   │
+      │                                        │
+      │ 5. Publish Feedback                    │
+      │ (MQTT: pixartek/vision/feedback)       │
+      │                                        │
+      └─────────────►┌──────────────────┐      │
+                     │   MQTT Broker    │      │
+                     │                  │      │
+                     │ (Message Queue)  │──────┘
+                     │                  │
+                     └──────────────────┘
+                             │
+                             │ 6. Backend receives
+                             │    MQTT message
+                             ▼
+                     ┌──────────────────┐
+                     │   Backend        │
+                     │   WebSocket      │
+                     │   Handler        │
+                     └──────┬───────────┘
+                            │
+                     7. Broadcasts to Frontend
+                            │
+                            ▼
+                     ┌──────────────────────┐
+                     │  Frontend receives   │
+                     │  feedback via WS     │
+                     │                      │
+                     │  Updates UI:         │
+                     │  • FeedbackOverlay   │
+                     │  • Metrics Display   │
+                     │  • Sound Alert       │
+                     └──────────────────────┘
+
+USER ADVANCES TO NEXT STAGE:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Frontend    Backend    MQTT      Vision    Projector
+   │          │        │          │          │
+   │ Click    │        │          │          │
+   │ "Next"   │        │          │          │
+   │──POST /api/sessions/{id}/stage
+   │          │        │          │          │
+   │          │ Increment stage   │          │
+   │          │        │          │          │
+   │          │ Publish new cmd   │          │
+   │          │───MQTT────────────│          │
+   │          │                   │ Load new │
+   │          │                   │ reference│
+   │          │                   │          │
+   │          │                   │ Setup    │
+   │          │                   │ camera   │
+   │          │                   │ analysis │
+   │          │                   │─────────►│
+   │          │                   │          │ Display
+   │          │                   │          │ next stage
+   │          │                   │          │
+   │ ◄─────────────────────────────────────────
+   │ Get feedback for new stage
+```
+
+---
+
+## 4. MATRIZ DE INTERCONEXIONES DE COMPONENTES
+
+```
+┌──────────────────┬────────┬──────────┬───────────┬────────────┐
+│   ORIGEN         │ PUERTO │  DESTINO │ PROTOCOLO │   DATOS    │
+├──────────────────┼────────┼──────────┼───────────┼────────────┤
+│ Frontend (3000)  │ HTTP   │ Backend  │ REST API  │ Artwork    │
+│                  │ 8000   │          │           │ Session    │
+│                  │        │          │           │ Config     │
+├──────────────────┼────────┼──────────┼───────────┼────────────┤
+│ Frontend (3000)  │ WebSocket          │ Raw MQTT  │ Feedback   │
+│                  │ /ws    │ Backend  │ messages  │ Metrics    │
+│                  │        │          │ (broadcast)            │
+├──────────────────┼────────┼──────────┼───────────┼────────────┤
+│ Backend (8000)   │ MQTT   │ Broker   │ Publish   │ Projection │
+│                  │ 1883   │          │           │ commands   │
+│                  │        │          │           │ Session    │
+│                  │        │          │           │ events     │
+├──────────────────┼────────┼──────────┼───────────┼────────────┤
+│ Vision Node      │ MQTT   │ Broker   │ Subscribe │ Image path │
+│ (RPI4-B)         │ 1883   │ & Pub    │ & Publish │ Stage info │
+│                  │        │          │           │            │
+├──────────────────┼────────┼──────────┼───────────┼────────────┤
+│ Vision Node      │ MQTT   │ Broker   │ Publish   │ Precision% │
+│ (RPI4-B)         │ 1883   │ & Backend│ Feedback  │ Color Dev  │
+│                  │        │          │ Metrics   │ Errors     │
+├──────────────────┼────────┼──────────┼───────────┼────────────┤
+│ Projection Node  │ MQTT   │ Broker   │ Subscribe │ Projection │
+│ (RPI4-A)         │ 1883   │          │           │ commands   │
+├──────────────────┼────────┼──────────┼───────────┼────────────┤
+│ Projection Node  │ GPIO   │ Projector│ Serial/   │ Image      │
+│ (RPI4-A)         │        │ Device   │ HDMI      │ output     │
+├──────────────────┼────────┼──────────┼───────────┼────────────┤
+│ Backend (8000)   │ GPIO   │ Pigment  │ PWM       │ Duration   │
+│ /hardware        │        │ Dispenser│ Control   │ Speed      │
+├──────────────────┼────────┼──────────┼───────────┼────────────┤
+│ Backend          │ File   │ Database │ SQL/ORM   │ Artwork    │
+│ (db layer)       │ System │ (SQLite) │ Queries   │ Sessions   │
+│                  │        │          │           │ Metrics    │
+├──────────────────┼────────┼──────────┼───────────┼────────────┤
+│ Vision Node      │ Device │ USB      │ Frames    │ Camera     │
+│ (RPI4-B)         │ Driver │ Camera   │ Per ~2sec │ capture    │
+│                  │        │          │           │            │
+└──────────────────┴────────┴──────────┴───────────┴────────────┘
+```
+
+---
+
+## 5. TABLA DE COMPONENTES Y RESPONSABILIDADES
+
+| Componente | Ubicación | Responsabilidad | Tecnología |
+|---|---|---|---|
+| **Frontend** | RPI5:3000 | UI/UX, Session Management, Real-time Feedback Display | Next.js, React, TypeScript |
+| **Backend API** | RPI5:8000 | REST endpoints, Business Logic, Session Control | FastAPI, Python |
+| **Database** | RPI5 | Persistent Storage (Artworks, Sessions, Metrics) | SQLite, SQLAlchemy |
+| **MQTT Broker** | RPI5:1883 | Pub/Sub Message Queue for Inter-Node Communication | Mosquitto |
+| **Vision Node** | RPI4-B | Image Analysis, Feedback Generation, Metrics | Python, OpenCV |
+| **Projection Node** | RPI4-A | Display Reference Images, Projector Control | Python, GPIO |
+| **USB Camera** | RPI4-B | Capture User's Painting Progress | Picamera2/libcamera |
+| **Pigment Dispenser** | RPI5 (GPIO) | Automated Paint Dispensing | PWM Motor Control |
+| **Projector** | RPI4-A | Display Stage Reference Image | HDMI/Serial |
+
+---
+
+## 6. FLUJO DE DATOS CRÍTICOS
+
+### Flujo 1: Inicio de Sesión
+```
+User Selects Artwork
+    ↓
+Frontend: POST /api/sessions
+    ↓
+Backend: Creates session record
+    ↓
+Backend: MQTT Publish → projection/command
+    ↓
+Vision Node: Receives command → Loads reference image
+    ↓
+Projection Node: Receives command → Displays reference on projector
+    ↓
+Vision Node: Camera ready for frame capture
+```
+
+### Flujo 2: Análisis Continuo de Visión
+```
+Every ~2 seconds:
+    ↓
+Vision Node: Capture frame from camera
+    ↓
+Vision Node: Compare vs Reference (OpenCV)
+    ↓
+Vision Node: Calculate metrics:
+    • Precision % (pixels matching)
+    • Color deviation (Delta-E)
+    • Stroke errors (zones with issues)
+    • Suggestions (actionable tips)
+    ↓
+Vision Node: MQTT Publish → vision/feedback
+    ↓
+Backend: Receive MQTT message
+    ↓
+Backend: WebSocket Broadcast to Frontend
+    ↓
+Frontend: Update UI (FeedbackOverlay, Charts, Alerts)
+```
+
+### Flujo 3: Avance de Etapa
+```
+User Clicks "Next Stage"
+    ↓
+Frontend: PATCH /api/sessions/{id}/stage
+    ↓
+Backend: Increment stage number
+    ↓
+Backend: Save to database
+    ↓
+Backend: MQTT Publish → projection/command (new stage)
+    ↓
+Vision & Projection Nodes: Update to new stage
+    ↓
+Projector: Display new reference image
+    ↓
+Vision: Reset analysis for new stage
+```
+
+---
+
+## 7. PUNTOS DE INTEGRACIÓN CRÍTICOS
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  CRITICAL INTEGRATION POINTS                                 │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  1. Frontend ↔ Backend (REST API)                            │
+│     └─ Port 8000 must be accessible from port 3000          │
+│     └─ CORS enabled for cross-origin requests               │
+│                                                              │
+│  2. Frontend ↔ Backend (WebSocket)                           │
+│     └─ /ws endpoint must handle incoming messages            │
+│     └─ Real-time feedback depends on this                    │
+│                                                              │
+│  3. Backend ↔ MQTT Broker                                    │
+│     └─ Must connect on localhost:1883                        │
+│     └─ Async MQTT client in Backend                          │
+│                                                              │
+│  4. Vision Node ↔ MQTT Broker                                │
+│     └─ Must subscribe to projection/command                  │
+│     └─ Must publish to vision/feedback                       │
+│     └─ Network must allow RPI4-B to reach RPI5:1883         │
+│                                                              │
+│  5. Projection Node ↔ Projector Hardware                     │
+│     └─ HDMI or Serial connection required                    │
+│     └─ Projector must be powered and operational             │
+│                                                              │
+│  6. Camera ↔ Vision Node                                     │
+│     └─ USB camera must be recognized by RPI4-B              │
+│     └─ Picamera2/libcamera drivers must be installed        │
+│                                                              │
+│  7. GPIO ↔ Pigment Dispenser (Backend on RPI5)              │
+│     └─ GPIO pins configured for PWM                         │
+│     └─ Motor control circuit properly wired                  │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 8. RESUMEN DE ARQUITECTURA
+
+### Características Clave:
+- **Distribuida**: 3 nodos independientes (RPI5 principal, RPI4-B visión, RPI4-A proyección)
+- **Asíncrona**: Comunicación MQTT pub/sub desacoplada
+- **Tiempo Real**: WebSocket para feedback inmediato al usuario
+- **Escalable**: Componentes débilmente acoplados
+- **Modular**: Cada nodo puede fallar sin afectar otros (excepto visión)
+
+### Tecnología Stack:
+| Capa | Tecnología |
+|---|---|
+| **Frontend** | Next.js 14, React 18, TypeScript, Tailwind CSS |
+| **Backend** | FastAPI, Python 3.11+, SQLAlchemy, Pydantic |
+| **Messaging** | MQTT (Mosquitto), WebSocket |
+| **Database** | SQLite |
+| **Vision** | Python, OpenCV, Picamera2 |
+| **Hardware** | Raspberry Pi 5, Pi 4 (B y A) |
+| **Communication** | REST HTTP, WebSocket, MQTT, GPIO |
+
+### Dependencias de Operación:
+1. **RPI5 debe estar operativo**: Contiene backend, frontend y MQTT broker
+2. **MQTT Broker (Mosquitto)**: Debe ejecutarse en RPI5:1883
+3. **Vision Node (RPI4-B)**: Opcional para feedback visual, pero necesario para operación completa
+4. **Projection Node (RPI4-A)**: Necesario para mostrar referencia en proyector
+5. **Pigment Dispenser**: GPIO en RPI5 para control automático
+
+---
+
+## 9. DIAGRAMA DETALLADO DE COMPONENTES
+
+### 9.1 Backend Component Diagram
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                   BACKEND (FastAPI) - RPI5:8000             │
+│                                                               │
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │  HTTP Request Router (Uvicorn ASGI Server)            │ │
+│  │                                                         │ │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐ │ │
+│  │  │ /api/artwork │  │ /api/session │  │ /api/hardware│ │ │
+│  │  │   Endpoints  │  │  Endpoints   │  │  Endpoints   │ │ │
+│  │  ├──────────────┤  ├──────────────┤  ├──────────────┤ │ │
+│  │  │ • GET all    │  │ • POST create│  │ • POST disp. │ │ │
+│  │  │ • GET by id  │  │ • PATCH stg  │  │ • GET status │ │ │
+│  │  │ • LIST       │  │ • GET detail │  │ • POST clean │ │ │
+│  │  │             │  │ • POST metric│  │ • POST test  │ │ │
+│  │  └──────────────┘  └──────────────┘  └──────────────┘ │ │
+│  │                                                         │ │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐ │ │
+│  │  │ /api/stages  │  │ /api/vision  │  │ /api/config  │ │ │
+│  │  │  Endpoints   │  │  Endpoints   │  │ Endpoints    │ │ │
+│  │  ├──────────────┤  ├──────────────┤  ├──────────────┤ │ │
+│  │  │ • GET list   │  │ • GET status │  │ • GET        │ │ │
+│  │  │ • GET image  │  │ • GET metrics│  │ • POST       │ │ │
+│  │  │ • GET proj   │  │ • POST diag  │  │              │ │ │
+│  │  └──────────────┘  └──────────────┘  └──────────────┘ │ │
+│  │                                                         │ │
+│  │  ┌──────────────────────────────────────────────────┐ │ │
+│  │  │           WebSocket Endpoint (/ws)              │ │ │
+│  │  │  • Upgrades HTTP to WS                          │ │ │
+│  │  │  • Maintains persistent connection              │ │ │
+│  │  │  • Broadcasts MQTT messages                     │ │ │
+│  │  │  • Handles client connect/disconnect            │ │ │
+│  │  └──────────────────────────────────────────────────┘ │ │
+│  └────────────────────────────────────────────────────────┘ │
+│                            ▲                                │
+│                            │                                │
+│                   HTTP/WebSocket                            │
+│                            │                                │
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │          Business Logic & State Management            │ │
+│  │                                                         │ │
+│  │  ┌──────────────────┐  ┌───────────────────────────┐ │ │
+│  │  │ Session Manager  │  │   MQTT Client             │ │ │
+│  │  │                  │  │   (Paho Python)           │ │ │
+│  │  │ • Create session │  │ • Connects to broker      │ │ │
+│  │  │ • Track current  │  │ • Subscribe topics:       │ │ │
+│  │  │   stage          │  │   pixartek/vision/*       │ │ │
+│  │  │ • Record metrics │  │ • Publish topics:         │ │ │
+│  │  │ • Calculate      │  │   pixartek/projection/*   │ │ │
+│  │  │   elapsed time   │  │ • Maintain connection     │ │ │
+│  │  │                  │  │ • Handle reconnects       │ │ │
+│  │  └──────────────────┘  └───────────────────────────┘ │ │
+│  │                                                         │ │
+│  │  ┌──────────────────┐  ┌───────────────────────────┐ │ │
+│  │  │ GPIO Controller  │  │  Artwork Service          │ │ │
+│  │  │                  │  │                           │ │ │
+│  │  │ • PWM output     │  │ • Load artworks from DB   │ │ │
+│  │  │ • Motor speed    │  │ • Validate artwork        │ │ │
+│  │  │ • Dispense logic │  │ • Serialize metadata      │ │ │
+│  │  │ • Safety checks  │  │ • Handle missing images   │ │ │
+│  │  └──────────────────┘  └───────────────────────────┘ │ │
+│  └────────────────────────────────────────────────────────┘ │
+│                            │                                │
+│              SQL / ORM Queries                              │
+│                            │                                │
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │      Database Layer (SQLAlchemy AsyncSession)         │ │
+│  │                                                         │ │
+│  │  ┌──────────────────────────────────────────────────┐ │ │
+│  │  │        SQLite Database (pixartek.db)            │ │ │
+│  │  │                                                  │ │ │
+│  │  │  Tables:                                        │ │ │
+│  │  │  • artwork (id, title, artist, metadata)        │ │ │
+│  │  │  • session (id, artwork_id, stage, created_at) │ │ │
+│  │  │  • session_metric (session_id, metrics)         │ │ │
+│  │  │  • artwork_stage (artwork_id, stage_num, img)   │ │ │
+│  │  │                                                  │ │ │
+│  │  │  Indexes:                                       │ │ │
+│  │  │  • artwork.id (PK)                              │ │ │
+│  │  │  • session.id (PK)                              │ │ │
+│  │  │  • session.artwork_id (FK)                      │ │ │
+│  │  │  • session_metric.session_id (FK)               │ │ │
+│  │  └──────────────────────────────────────────────────┘ │ │
+│  └────────────────────────────────────────────────────────┘ │
+│                                                               │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 10. DIAGRAMA DE SECUENCIA: Inicio de Sesión Completo
+
+```
+User           Frontend          Backend          MQTT Broker       Vision Node    Projector
+ │                │                  │                  │                │            │
+ │ Click "Start"  │                  │                  │                │            │
+ ├───────────────►│                  │                  │                │            │
+ │                │ REST POST        │                  │                │            │
+ │                │ /api/sessions    │                  │                │            │
+ │                ├─────────────────►│                  │                │            │
+ │                │                  │                  │                │            │
+ │                │                  │ Validate         │                │            │
+ │                │                  │ Create record    │                │            │
+ │                │                  │ Save to DB       │                │            │
+ │                │                  │                  │                │            │
+ │                │                  │ MQTT Publish     │                │            │
+ │                │                  │ projection/cmd   ├───────────────►│            │
+ │                │                  │                  │                │            │
+ │                │                  │                  │                │ Load ref   │
+ │                │                  │                  │                │ image      │
+ │                │                  │                  │                │            │
+ │                │  Response 200    │                  │                │            │
+ │                │◄─────────────────┤                  │                │            │
+ │                │ {session_id, ..} │                  │                │            │
+ │                │                  │                  │                │            │
+ │ Show Session   │                  │ MQTT Publish     │                │            │
+ │ Page           │                  │ (broadcast via WS)                │            │
+ │◄───────────────┤                  │                  │                │            │
+ │                │  WebSocket msg   │                  │                │            │
+ │                │◄──────────────────────────────────────────────────────────────────┤
+ │                │                  │                  │                │  Display   │
+ │                │                  │                  │                │  reference │
+ │                │                  │                  │                │  on proj   │
+ │ See reference  │                  │                  │                │────────────►
+ │ on projector   │                  │                  │                │            │
+ │ + ready to paint                  │                  │                │            │
+ │                │                  │                  │                │            │
+ │ (Session active - painting begins)│                  │                │            │
+ │                │                  │                  │                │            │
+ │ Every ~2 sec:  │                  │                  │                │            │
+ │ User paints    │                  │                  │                │            │
+ │                │                  │                  │                │ Capture    │
+ │                │                  │                  │                │ frame      │
+ │                │                  │                  │                │            │
+ │                │                  │                  │                │ Analyze    │
+ │                │                  │                  │                │ metrics    │
+ │                │                  │                  │                │            │
+ │                │                  │                  │                │ Publish    │
+ │                │                  │                  │◄───────────────│ feedback   │
+ │                │                  │  Receive MQTT msg│                │            │
+ │                │                  │  Broadcast via WS├────────────────────────────►
+ │                │  Feedback        │                  │                │            │
+ │                │  message (WS)    │                  │                │            │
+ │◄───────────────┤◄─────────────────┤                  │                │            │
+ │                │                  │                  │                │            │
+ │ Display        │                  │                  │                │            │
+ │ FeedbackOverlay│                  │                  │                │            │
+ │ 4 seconds      │                  │                  │                │            │
+ │ Play sound     │                  │                  │                │            │
+ │                │                  │                  │                │            │
+ │ ... (repeats every 2 sec)         │                  │                │            │
+ │                │                  │                  │                │            │
+ │ Click "Next"   │                  │                  │                │            │
+ ├───────────────►│                  │                  │                │            │
+ │                │ REST PATCH       │                  │                │            │
+ │                │ /api/sessions/.../stage            │                │            │
+ │                ├─────────────────►│                  │                │            │
+ │                │                  │ Increment stage  │                │            │
+ │                │                  │ MQTT Publish new │                │            │
+ │                │                  │ projection cmd   ├───────────────►│            │
+ │                │  Response 200    │                  │                │            │
+ │                │◄─────────────────┤                  │                │ Load new   │
+ │                │                  │                  │                │ reference  │
+ │                │  WebSocket msg   │                  │                │────────────►
+ │ See Stage 2 ref│◄────────────────────────────────────────────────────────────────►
+ │ on projector   │                  │                  │                │            │
+ │ Ready to paint │                  │                  │                │            │
+ │ Stage 2        │                  │                  │                │            │
+ │                │                  │                  │                │            │
+```
+
+---
+
+**Fin del Documento (versión mejorada con componentes detallados y diagramas de secuencia)**

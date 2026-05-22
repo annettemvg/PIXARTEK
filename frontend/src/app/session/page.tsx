@@ -8,15 +8,94 @@ import { useSessionApi } from "@/hooks/useSession";
 import { useArtworks } from "@/hooks/useArtworks";
 import { useWebSocket, type WsMessage } from "@/hooks/useWebSocket";
 import { ARTWORKS } from "@/lib/mock-artworks";
-import { getStageImageUrl, projectStage } from "@/lib/api-client";
+import { getStageImageUrl, projectStage, clearProjection, cameraOn, cameraOff, startMonitor, stopMonitor, updateMonitorStage, signalColorsDispensed } from "@/lib/api-client";
 import PixartekLogo from "@/components/ui/PixartekLogo";
-import FeedbackPanel from "@/components/kiosk/FeedbackPanel";
+import PixiEmbedded from "@/components/ui/PixiEmbedded";
 import NodeStatus from "@/components/kiosk/NodeStatus";
 import HardwareControls from "@/components/kiosk/HardwareControls";
 import CompletionScreen from "@/components/kiosk/CompletionScreen";
-import FeedbackOverlay, { type FeedbackType } from "@/components/feedback/FeedbackOverlay";
-import VisionAnalysisModal from "@/components/ui/VisionAnalysisModal";
+
 import type { NodeState } from "@/types/session";
+
+function PigmentosPanel({ artworkId, palette, onDispensed, onClean }: { artworkId: string; palette: string[]; onDispensed?: () => void; onClean?: () => void }) {
+  const [seq, setSeq] = useState<"idle" | "running" | "done">("idle");
+  const [step, setStep] = useState(0);
+  const [cleaning, setCleaning] = useState(false);
+
+  const handleClick = async () => {
+    if (seq === "running") return;
+    setSeq("running");
+    setStep(0);
+    // Notificar al monitor de Pixi que el usuario presionó Crear Colores
+    onDispensed?.();
+    try {
+      const res = await fetch(`http://${window.location.hostname}:8000/api/hardware/dispense/sequence`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ artwork_id: artworkId }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        const total = data.total_colors;
+        for (let i = 0; i < total; i++) {
+          setStep(i + 1);
+          if (i < total - 1) await new Promise(r => setTimeout(r, 5000));
+        }
+      }
+    } catch {}
+    setSeq("done");
+    setTimeout(() => { setSeq("idle"); setStep(0); }, 3000);
+  };
+
+  return (
+    <div className="w-72 border-r border-pixartek-border flex flex-col shrink-0 bg-white items-center justify-center gap-5 p-6">
+      <button
+        onClick={async () => { if (cleaning) return; setCleaning(true); onClean?.(); setTimeout(() => setCleaning(false), 6000); }}
+        disabled={cleaning}
+        className="w-full flex items-center justify-center px-6 py-5 rounded-2xl bg-sky-400 text-white shadow-btn hover:opacity-90 active:scale-[0.97] disabled:opacity-60 transition-all"
+      >
+        <span className="font-display font-700 text-lg tracking-widest uppercase">
+          {cleaning ? "Limpiando…" : "Limpiar Pincel"}
+        </span>
+      </button>
+      <button
+        onClick={handleClick}
+        disabled={seq === "running"}
+        className="w-full flex items-center justify-center px-6 py-5 rounded-2xl bg-pixartek-coral text-white shadow-btn hover:opacity-90 active:scale-[0.97] disabled:opacity-60 transition-all"
+      >
+        <span className="font-display font-700 text-lg tracking-widest uppercase">
+          {seq === "running" ? `Creando ${step}/${palette.length}…` : seq === "done" ? "¡Listo!" : "Crear Colores"}
+        </span>
+      </button>
+
+      {/* Paleta visual: imagen fija para faro-nocturno, swatches animados para el resto */}
+      {artworkId === "faro-nocturno" ? (
+        <div className="w-full overflow-hidden rounded-2xl shadow-sm aspect-square flex items-center justify-center">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/palettes/faro-nocturno.png"
+            alt="Colores Faro Nocturno"
+            className="w-full h-full object-cover scale-[1.22]"
+          />
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-3 w-full">
+          {palette.map((hex: string, i: number) => (
+            <div key={i}
+              className="aspect-square rounded-xl shadow-sm transition-all duration-500"
+              style={{
+                backgroundColor: hex,
+                opacity: seq === "running" ? (i < step ? 1 : 0.3) : 1,
+                transform: seq === "running" && i === step - 1 ? "scale(1.05)" : "scale(1)",
+                boxShadow: seq === "running" && i === step - 1 ? `0 0 16px ${hex}` : undefined,
+              }}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function formatTime(s: number) {
   const m = Math.floor(s / 60).toString().padStart(2, "0");
@@ -29,13 +108,14 @@ function SessionContent() {
   const params = useSearchParams();
   const artworkId = params.get("artwork") ?? "";
   const startStage = parseInt(params.get("stage") ?? "1", 10);
+  const presentacionMode = params.get("presentacion") === "true";
 
   const store = useSessionStore();
   const api = useSessionApi();
   const { artworks } = useArtworks();
   const { profile } = useProfileStore();
   const [stageImgError, setStageImgError] = useState(false);
-  const [feedbackOverlay, setFeedbackOverlay] = useState<{ type: FeedbackType; message?: string } | null>(null);
+
 
   const timerRef  = useRef<ReturnType<typeof setInterval> | null>(null);
   const metricRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -53,18 +133,6 @@ function SessionContent() {
         timestamp:       (p.timestamp       as number) ?? Date.now(),
       });
 
-      // Determine feedback type
-      const errors = (p.stroke_errors as { zone: string; message: string }[]) ?? [];
-      const suggestions = (p.suggestions as string[]) ?? [];
-      const precision = (p.precision_pct as number) ?? 0;
-
-      if (errors.length > 0) {
-        setFeedbackOverlay({ type: "corrección", message: errors[0]?.message });
-      } else if (suggestions.length > 0) {
-        setFeedbackOverlay({ type: "sugerencia", message: suggestions[0] });
-      } else if (precision > 85) {
-        setFeedbackOverlay({ type: "correcto" });
-      }
     }
     if (msg.topic === "pixartek/system/heartbeat") {
       store.setNodeState(msg.payload.node as string, (msg.payload.status as NodeState) ?? "ok");
@@ -90,9 +158,25 @@ function SessionContent() {
       if (fb) api.saveMetric({ stage, precision_pct: fb.precision_pct, color_deviation: fb.color_deviation, elapsed_s: elapsed, feedback_json: { stroke_errors: fb.stroke_errors, suggestions: fb.suggestions } });
     }, 30000);
     projectStage(artworkId, startStage);
+    // Encender cámara con delay para evitar race condition con cameraOff de sesión anterior
+    const firstStage = artwork.stages[startStage - 1];
+    const cameraTimer = setTimeout(() => {
+      cameraOn();
+      startMonitor({
+        artwork_id: artworkId,
+        artwork_title: artwork.title,
+        artwork_artist: artwork.artist,
+        stage_title: firstStage?.title ?? "",
+        stage_number: startStage,
+      });
+    }, 300);
     return () => {
+      clearTimeout(cameraTimer);
       if (timerRef.current) clearInterval(timerRef.current);
       if (metricRef.current) clearInterval(metricRef.current);
+      stopMonitor();
+      clearProjection();
+      cameraOff();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [artworkId]);
@@ -119,20 +203,43 @@ function SessionContent() {
 
   const stage = artwork.stages[store.currentStage - 1];
   const progressPct = ((store.currentStage - 1) / artwork.stages.length) * 100;
-  const currentStageImgUrl = getStageImageUrl(artworkId, store.currentStage);
+  const currentStageImgUrl = stage?.image ?? getStageImageUrl(artworkId, store.currentStage);
+
+  function launchConfetti() {
+  }
 
   async function handleNextStage() {
     store.recordStageMetric();
     const isLast = store.currentStage >= store.totalStages;
     const nextStageNum = store.currentStage + 1;
+    launchConfetti();
     store.nextStage();
-    if (!isLast) { await api.nextStage(nextStageNum); projectStage(artworkId, nextStageNum); }
+    if (!isLast) {
+      await api.nextStage(nextStageNum);
+      projectStage(artworkId, nextStageNum);
+      const nextStage = artwork?.stages[nextStageNum - 1];
+      if (nextStage) updateMonitorStage({ stage_title: nextStage.title, stage_number: nextStageNum });
+    } else {
+      clearProjection();
+      cameraOff();
+    }
   }
   async function handlePrevStage() {
     const prev = store.currentStage - 1;
-    if (prev >= 1) { store.prevStage(); projectStage(artworkId, prev); }
+    if (prev >= 1) {
+      store.prevStage();
+      projectStage(artworkId, prev);
+      const prevStage = artwork?.stages[prev - 1];
+      if (prevStage) updateMonitorStage({ stage_title: prevStage.title, stage_number: prev });
+    }
   }
-  async function handleDispense() { store.setDispensing(true); await api.dispense(); setTimeout(() => store.setDispensing(false), 3000); }
+  async function handleDispense() {
+    store.setDispensing(true);
+    await api.dispense(1, artworkId);
+    // Notificar al monitor: el usuario presionó Crear Colores → iniciar cuenta de 60s
+    signalColorsDispensed();
+    setTimeout(() => store.setDispensing(false), 3000);
+  }
   async function handleClean() { store.setCleaning(true); await api.clean(); setTimeout(() => store.setCleaning(false), 2500); }
 
   return (
@@ -196,9 +303,17 @@ function SessionContent() {
             className="px-4 py-2 rounded-xl border-2 border-pixartek-border font-body font-600 text-sm text-pixartek-muted hover:border-pixartek-coral/40 disabled:opacity-30 disabled:cursor-not-allowed transition">
             ‹ Anterior
           </button>
-          <button onClick={handleNextStage}
-            className="px-5 py-2 rounded-xl font-display font-700 text-sm text-white bg-pixartek-coral shadow-btn hover:opacity-90 active:scale-[0.98] transition">
-            {store.currentStage === store.totalStages ? "Finalizar ✓" : "Siguiente ›"}
+          <button
+            onClick={handleNextStage}
+            disabled={!store.stageApproved}
+            title={store.stageApproved ? "" : "Pixi debe aprobar tu etapa antes de continuar"}
+            className={`px-5 py-2 rounded-xl font-display font-700 text-sm text-white shadow-btn transition flex items-center gap-2
+              ${store.stageApproved
+                ? "bg-pixartek-coral hover:opacity-90 active:scale-[0.98]"
+                : "bg-pixartek-muted cursor-not-allowed opacity-50"}`}>
+            {store.stageApproved
+              ? (store.currentStage === store.totalStages ? "Finalizar ✓" : "Siguiente ›")
+              : "🔒 Siguiente"}
           </button>
         </div>
       </header>
@@ -206,87 +321,8 @@ function SessionContent() {
       {/* ── Body ── */}
       <div className="flex flex-1 overflow-hidden">
 
-        {/* Left sidebar */}
-        <div className="w-72 border-r border-pixartek-border flex flex-col shrink-0 bg-white scroll-area">
-          {/* Top section: Image + Title (pinned) */}
-          <div className="p-4 border-b border-pixartek-border shrink-0">
-            <p className="font-display font-600 text-xs text-pixartek-muted uppercase tracking-widest mb-2">Etapa Actual</p>
-            <div className="w-full aspect-square rounded-xl overflow-hidden border border-pixartek-border mb-3" style={{ backgroundColor: artwork.color }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={currentStageImgUrl} alt={`Etapa ${store.currentStage}`} className="w-full h-full object-cover" />
-            </div>
-            <p className="font-display font-700 text-sm text-pixartek-coral uppercase tracking-wide">
-              {stage.title}
-            </p>
-          </div>
-
-          {/* Scrollable content */}
-          <div className="flex-1 overflow-y-auto">
-            <div className="p-4 border-b border-pixartek-border">
-              <p className="font-display font-600 text-xs text-pixartek-muted uppercase tracking-widest mb-2">Objetivo</p>
-              <p className="font-body text-xs text-pixartek-ink leading-relaxed">{stage.objective || stage.description}</p>
-              <p className="font-body text-xs text-pixartek-muted/50 mt-2">⏱ {stage.duration_min} min</p>
-            </div>
-
-            <div className="p-4 border-b border-pixartek-border">
-              <p className="font-display font-600 text-xs text-pixartek-muted uppercase tracking-widest mb-2">Colores</p>
-              <div className="flex flex-wrap gap-1.5">
-                {(stage.colors || []).map((color, i) => (
-                  <span key={i} className="px-2 py-1 bg-pixartek-cream text-pixartek-ink rounded text-xs border border-pixartek-border font-body">
-                    {color}
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            <div className="p-4 border-b border-pixartek-border">
-              <p className="font-display font-600 text-xs text-pixartek-muted uppercase tracking-widest mb-2">Materiales</p>
-              <ul className="text-xs text-pixartek-ink font-body space-y-1">
-                {(stage.materials || []).map((material, i) => (
-                  <li key={i} className="flex items-start gap-2">
-                    <span className="text-pixartek-coral mt-0.5">•</span>
-                    <span>{material}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="p-4 border-b border-pixartek-border">
-              <p className="font-display font-600 text-xs text-pixartek-muted uppercase tracking-widest mb-2">Brochas</p>
-              <ul className="text-xs text-pixartek-ink font-body space-y-1">
-                {(stage.brushes || []).map((brush, i) => (
-                  <li key={i} className="flex items-start gap-2">
-                    <span className="text-pixartek-coral mt-0.5">•</span>
-                    <span>{brush}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="p-4">
-              <p className="font-display font-600 text-xs text-pixartek-muted uppercase tracking-widest mb-3">Todas las etapas</p>
-              <div className="space-y-1">
-                {artwork.stages.map(s => (
-                  <div key={s.number} className={clsx(
-                    "flex items-center gap-2 px-3 py-2 rounded text-xs font-body transition cursor-pointer hover:bg-pixartek-cream/50 border",
-                    s.number === store.currentStage ? "bg-pixartek-coral/15 text-pixartek-coral font-700 border-pixartek-coral/30" :
-                    s.number < store.currentStage   ? "text-pixartek-muted/40 line-through border-pixartek-border/30" : "text-pixartek-muted border-pixartek-border/50"
-                  )}>
-                    <span className={clsx("w-5 h-5 rounded-full flex items-center justify-center text-xs font-display font-700 shrink-0 text-white",
-                      s.number < store.currentStage  ? "bg-pixartek-mint" :
-                      s.number === store.currentStage ? "bg-pixartek-coral" : "bg-pixartek-border")}>
-                      {s.number < store.currentStage ? "✓" : s.number}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <p className="truncate font-600">{s.title}</p>
-                      <p className="text-xs opacity-60">{s.duration_min} min</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
+        {/* Left panel pigmentos */}
+        <PigmentosPanel artworkId={artworkId} palette={(artwork as {palette?: string[]}).palette || []} onDispensed={signalColorsDispensed} onClean={handleClean} />
 
         {/* Center image */}
         <div className="flex-1 flex flex-col bg-[#EDEAE5] relative overflow-hidden">
@@ -318,36 +354,23 @@ function SessionContent() {
           </div>
         </div>
 
-        {/* Right panel */}
-        <div className="w-72 border-l border-pixartek-border flex flex-col shrink-0 bg-white scroll-area">
-          <div className="p-4 border-b border-pixartek-border">
-            <p className="font-display font-600 text-xs text-pixartek-muted uppercase tracking-widest mb-3">Análisis de visión</p>
-            <VisionAnalysisModal />
-          </div>
-          <div className="p-4 border-b border-pixartek-border">
-            <p className="font-display font-600 text-xs text-pixartek-muted uppercase tracking-widest mb-3">Retroalimentación</p>
-            <FeedbackPanel feedback={store.feedback} />
-          </div>
-          <div className="p-4 border-b border-pixartek-border">
-            <p className="font-display font-600 text-xs text-pixartek-muted uppercase tracking-widest mb-3">Hardware</p>
-            <HardwareControls dispensing={store.dispensing} cleaning={store.cleaning} onDispense={handleDispense} onClean={handleClean} />
-          </div>
-          <div className="p-4">
-            <p className="font-display font-600 text-xs text-pixartek-muted uppercase tracking-widest mb-3">Estado de nodos</p>
-            <NodeStatus nodes={store.nodes} />
+        {/* Right panel — Pixi chat + hardware */}
+        <div className="w-72 border-l border-pixartek-border flex flex-col shrink-0 bg-white">
+          {/* Pixi chat — ocupa todo el espacio disponible */}
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <PixiEmbedded
+              artworkTitle={artwork.title}
+              artworkArtist={artwork.artist}
+              stageTitle={stage.title}
+              stageNumber={store.currentStage}
+              silent={presentacionMode}
+            />
           </div>
         </div>
       </div>
 
       {/* Feedback Overlay */}
-      {feedbackOverlay && (
-        <FeedbackOverlay
-          type={feedbackOverlay.type}
-          visible={!!feedbackOverlay}
-          onClose={() => setFeedbackOverlay(null)}
-          message={feedbackOverlay.message}
-        />
-      )}
+
     </div>
   );
 }

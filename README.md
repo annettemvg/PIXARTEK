@@ -1,306 +1,316 @@
-# 🎨 PIXARTEK - Robot Educativo de Pintura Artística
+# PIXARTEK — Sistema de Arte Interactivo
 
-> Un sistema inteligente de asistencia para pintura artística usando Raspberry Pi, visión computarizada y análisis en tiempo real.
-
-![Status](https://img.shields.io/badge/Status-Active-brightgreen)
-![Version](https://img.shields.io/badge/Version-1.0.0-blue)
-![License](https://img.shields.io/badge/License-MIT-green)
-
-## 🚀 Descripción General
-
-PIXARTEK es una plataforma educativa que proporciona retroalimentación en tiempo real mientras creas arte. Utilizando un sistema distribuido de Raspberry Pi y análisis de visión computarizada, ofrece:
-
-- **Análisis de Color en Vivo** - Detección de colores y pigmentación
-- **Feedback Instantáneo** - Sugerencias sobre qué colores faltan
-- **Registro de Sesiones** - Seguimiento de obras y sesiones de pintura
-- **Interfaz Intuitiva** - Panel de control web en tiempo real
-
-## 🏗️ Arquitectura del Sistema
-
-```
-┌─────────────────────────────────────────────────────┐
-│           PIXARTEK DISTRIBUTED SYSTEM               │
-├─────────────────────────────────────────────────────┤
-│                                                     │
-│  RPI5 (192.168.86.243)        RPI4A (192.168.86.244)│
-│  Master Control               Vision Node            │
-│  ├─ Next.js (3000)            ├─ Camera Capture    │
-│  ├─ FastAPI (8000)            ├─ OpenCV Analysis   │
-│  ├─ HTTP Server (9999)        └─ MQTT Publisher    │
-│  └─ MQTT Broker (1883)                              │
-│                                                     │
-│  RPI4B (192.168.86.245)                            │
-│  Projection Node                                    │
-│  └─ Projector Control                              │
-│                                                     │
-└─────────────────────────────────────────────────────┘
-```
-
-## 📋 Estructura del Proyecto
-
-```
-pixartek/
-├── frontend/                  # Next.js React Application
-│   ├── src/
-│   │   ├── app/             # App routes and layout
-│   │   ├── components/      # React components
-│   │   │   ├── ui/         # UI components (CameraLiveFeed, etc)
-│   │   │   ├── modals/     # Modal components
-│   │   │   └── sections/   # Page sections
-│   │   ├── lib/            # Utilities and helpers
-│   │   └── styles/         # Tailwind CSS
-│   ├── public/             # Static assets
-│   ├── package.json
-│   └── next.config.js
-│
-├── backend/                   # FastAPI Backend
-│   ├── main.py             # Main application
-│   ├── models/             # Data models
-│   ├── routes/             # API endpoints
-│   └── requirements.txt
-│
-├── nodes/                     # RPi-specific services
-│   ├── vision/             # RPI4A Vision processing
-│   │   ├── main.py        # Vision service main
-│   │   ├── camera.py      # Camera interface
-│   │   ├── calibration.py # Color calibration
-│   │   └── pipeline.py    # Analysis pipeline
-│   │
-│   └── projection/         # RPI4B Projection control
-│       └── main.py
-│
-├── docs/                      # Documentation
-│   ├── ARCHITECTURE.md
-│   ├── DEPLOYMENT.md
-│   └── API.md
-│
-├── .gitignore
-├── README.md
-└── LICENSE
-```
-
-## ⚡ Quick Start
-
-### Requisitos Previos
-
-- **Hardware:**
-  - Raspberry Pi 5 (Master/Frontend)
-  - Raspberry Pi 4A (Vision Node)
-  - Raspberry Pi 4B (Projection Node - Opcional)
-  - Cámara compatible con OpenCV
-  - Red conectada
-
-- **Software:**
-  - Node.js 18+ (para frontend)
-  - Python 3.9+ (para backend/vision)
-  - Git
-
-### Instalación Local
-
-#### 1. Frontend (Next.js)
-
-```bash
-cd frontend
-npm install
-npm run dev
-# Accede a http://localhost:3000
-```
-
-#### 2. Backend (FastAPI)
-
-```bash
-cd backend
-python -m venv venv
-source venv/bin/activate  # En Windows: venv\Scripts\activate
-pip install -r requirements.txt
-python main.py
-# API disponible en http://localhost:8000
-```
-
-#### 3. Nodo de Visión (RPI4A)
-
-```bash
-cd nodes/vision
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-python main.py
-```
-
-## 🌐 Deployment
-
-### Vercel (Frontend)
-
-El frontend está optimizado para Vercel. Desplegar es tan simple como:
-
-1. Conectar repositorio GitHub a Vercel
-2. Seleccionar carpeta `frontend`
-3. Vercel detectará Next.js automáticamente
-4. Deploy con un clic
-
-**Live Demo:** [pixartek.vercel.app](https://pixartek.vercel.app)
-
-### Backend & Vision Nodes
-
-- **Backend:** Dockerizado para desplegar en cualquier servidor
-- **Vision Nodes:** Se ejecutan localmente en Raspberry Pi con systemd
-
-## 🔌 API Endpoints
-
-### Vision Analysis
-
-```
-POST /api/analysis
-Body: {
-  "artwork_id": "string",
-  "canvas_state": "jpeg_base64",
-  "current_colors": ["#FF0000", "#00FF00"]
-}
-Response: {
-  "missing_colors": ["#0000FF"],
-  "pigment_suggestions": ["Azul Cobalto"],
-  "composition_feedback": "string"
-}
-```
-
-### Artwork Management
-
-```
-GET /api/artworks              # Listar obras
-POST /api/artworks             # Crear obra
-GET /api/artworks/{id}         # Obtener obra
-PUT /api/artworks/{id}         # Actualizar obra
-POST /api/artworks/{id}/analyze # Analizar obra
-```
-
-## 🎥 Live Feed System
-
-El sistema de live feed captura frames en tiempo real:
-
-- **Captura:** RPI4A captura 30 FPS
-- **Sincronización:** Frames se sincronizan cada 200ms a RPI5
-- **Transmisión:** HTTP server sirve frames JPEG
-- **Display:** React component muestra video en vivo
-
-```
-RPI4A Camera → /tmp/latest_canvas.jpg 
-  ↓ [SSH/SCP sync every 200ms]
-RPI5 HTTP Server → /tmp/camera_frame.jpg
-  ↓ [HTTP GET]
-React Component → Browser Display
-```
-
-## 🛠️ Tecnologías Utilizadas
-
-### Frontend
-- **Next.js 16** - React framework
-- **TypeScript** - Type safety
-- **Tailwind CSS** - Styling
-- **WebSocket** - Real-time updates
-
-### Backend
-- **FastAPI** - Python web framework
-- **SQLAlchemy** - ORM
-- **Pydantic** - Data validation
-- **MQTT** - Message broker
-
-### Vision
-- **OpenCV (cv2)** - Computer vision
-- **NumPy** - Numerical computing
-- **Scikit-image** - Image processing
-
-### Infrastructure
-- **Raspberry Pi** - Edge computing
-- **systemd** - Service management
-- **Docker** - Containerization (opcional)
-- **Vercel** - Frontend hosting
-
-## 📊 Monitoreo y Logs
-
-### Frontend
-```bash
-# Ver logs de Next.js
-tail -f /tmp/nextjs.log
-
-# Ver status
-curl http://localhost:3000
-```
-
-### Vision Service
-```bash
-# Ver status del servicio
-sudo systemctl status pixartek-vision
-
-# Ver logs
-journalctl -u pixartek-vision -n 100 --no-pager
-```
-
-### Frame Sync
-```bash
-# Verificar sincronización
-ls -lh /tmp/camera_frame.jpg
-stat /tmp/camera_frame.jpg
-```
-
-## 🐛 Troubleshooting
-
-### Live Feed aparece en negro
-1. Verificar vision service: `systemctl status pixartek-vision`
-2. Verificar frame en RPI4A: `ls /tmp/latest_canvas.jpg`
-3. Verificar sync script: `pgrep -f sync_camera_frames`
-4. Verificar HTTP server: `curl http://localhost:9999/camera_frame.jpg`
-
-### API no responde
-1. Verificar backend: `curl http://localhost:8000/docs`
-2. Revisar logs: `tail -f /tmp/backend.log`
-3. Reiniciar servicio: `sudo systemctl restart pixartek-backend`
-
-### Conexión RPI's lenta
-1. Verificar red: `ping 192.168.86.244`
-2. Verificar SSH: `ssh pi@192.168.86.244 "echo OK"`
-3. Reiniciar red: `sudo systemctl restart networking`
-
-## 📈 Performance
-
-- **Latencia de Frame:** ~200ms
-- **Throughput:** ~50 Mbps (red local)
-- **Memoria Frontend:** ~80MB
-- **CPU Vision:** ~45% (RPI4A)
-
-## 📝 Changelog
-
-### v1.0.0 (2026-05-02)
-- ✅ Live camera feed system operativo
-- ✅ Análisis de visión en tiempo real
-- ✅ Interfaz web responsive
-- ✅ Sistema distribuido stable
-
-## 🤝 Contribuciones
-
-¡Las contribuciones son bienvenidas! Por favor:
-
-1. Fork el repositorio
-2. Crea una rama (`git checkout -b feature/AmazingFeature`)
-3. Commit tus cambios (`git commit -m 'Add AmazingFeature'`)
-4. Push a la rama (`git push origin feature/AmazingFeature`)
-5. Abre un Pull Request
-
-## 📞 Soporte
-
-Para soporte, contacta o abre un issue en GitHub.
-
-## 📄 Licencia
-
-Este proyecto está bajo licencia MIT - ver archivo `LICENSE` para detalles.
-
-## 👨‍💻 Autor
-
-**PIXARTEK Team**
-- **Created:** 2026
-- **Status:** Active Development
+Sistema distribuido de 4 Raspberry Pi que guía a estudiantes en la creación de obras de arte mediante análisis de visión artificial, dispensación automática de pigmentos y proyección de imágenes guía.
 
 ---
 
-**¿Preguntas?** Abre un issue o contacta directamente.
+## 🗺️ Arquitectura General
 
-**Última actualización:** 2026-05-02
+```
+┌──────────────────────────────────────────────────────────────┐
+│                      RED LOCAL (192.168.0.x)                  │
+│                                                                │
+│   RPi5 (197)           RPi4-A (198)        RPi4-B (192)      │
+│  ┌───────────┐         ┌──────────┐        ┌──────────┐      │
+│  │    APP    │◄───────►│  CÁMARA  │        │PROYECTOR │      │
+│  │  Backend  │  HTTP   │ Análisis │        │ Imágenes │      │
+│  │ Frontend  │         │  Video   │        │  guía    │      │
+│  │ Actuador  │         └──────────┘        └──────────┘      │
+│  │Dispensador│                                                 │
+│  └───────────┘         Cleaning (149)                        │
+│                        ┌──────────┐                           │
+│                        │ LIMPIEZA │                           │
+│                        │ Pinceles │                           │
+│                        └──────────┘                           │
+└──────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 📦 Estructura del Repositorio
+
+```
+pixartek/
+├── README.md
+├── backend/                  → API Python FastAPI  ──────────► corre en RPi5
+├── frontend/                 → App Next.js (kiosk) ──────────► corre en RPi5
+├── nodes/
+│   ├── actuator/             → Motor dispensador   ──────────► corre en RPi5
+│   ├── vision/               → Cámara + análisis IA ─────────► corre en RPi4-A
+│   └── projection/           → Control proyector   ──────────► corre en RPi4-B
+└── deploy/
+    ├── rpi5/                 → Instalación RPi5
+    ├── rpi4-a/               → Instalación RPi4-A (cámara)
+    └── rpi4-b/               → Instalación RPi4-B (proyector)
+```
+
+---
+
+## 🍓 RPi5 — APP + ACTUADOR `192.168.0.197`
+
+**Cerebro del sistema.** Corre el backend, el frontend kiosk y controla el motor stepper que dispensa los pigmentos.
+
+### Servicios
+```bash
+systemctl status pixartek-backend     # API Python  → puerto 8000
+systemctl status pixartek-frontend    # Next.js     → puerto 3000
+systemctl status mosquitto            # MQTT broker → puerto 1883
+```
+
+### Backend (`backend/`)
+API FastAPI con todos los endpoints del sistema.
+
+```
+backend/
+├── main.py                        → Punto de entrada
+├── app/
+│   ├── api/routes/
+│   │   ├── artworks.py            → Catálogo de obras
+│   │   ├── sessions.py            → Sesiones de pintura
+│   │   ├── hardware.py            → Control actuador y dispensación
+│   │   ├── vision.py              → Proxy hacia cámara RPi4-A
+│   │   ├── projection.py          → Proxy hacia proyector RPi4-B
+│   │   ├── chat.py                → IA Pixi (Gemini)
+│   │   ├── tts.py                 → Texto a voz
+│   │   └── ws.py                  → WebSocket tiempo real
+│   ├── core/
+│   │   ├── monitor.py             → Monitor de sesión con Gemini
+│   │   └── config.py              → Variables de entorno
+│   └── db/
+│       ├── base.py                → Modelos SQLite
+│       └── seed.py                → Datos iniciales
+```
+
+### Frontend (`frontend/`)
+Kiosk táctil Next.js. El estudiante lo ve en la pantalla principal.
+
+```
+frontend/src/app/
+├── page.tsx              → Pantalla de inicio
+├── catalog/              → Catálogo de obras
+├── session/              → Sesión activa de pintura (pantalla principal)
+├── settings/             → Configuración del kiosk
+└── signin/               → Identificación del estudiante
+```
+
+### Actuador — Dispensador de Pigmentos (`nodes/actuator/`)
+
+Motor stepper TMC2209 que recorre un riel y dispensa pigmentos en cada cubículo.
+
+```
+nodes/actuator/
+├── actuador.py                → Ciclo completo: MIN → dispensa → MAX → MIN
+├── actuador_home.py           → Ir a posición mínima (HOME)
+├── actuador_max.py            → Ir a posición máxima
+├── actuador_medir.py          → Medir pasos totales del recorrido
+├── actuador_posiciones.py     → Guardar posiciones de parada
+├── actuador_dispense.py       → Dispensar en posición específica
+├── actuador_btn.py            → Control manual con botón físico
+└── colors/
+    ├── flores-blancas/
+    │   ├── ciclo_flores_blancas.py    → Ciclo completo (4 colores)
+    │   ├── burnt_sienna.py
+    │   ├── champagne.py
+    │   ├── ivory_white.py
+    │   └── lime_green.py
+    ├── faro-nocturno/
+    │   ├── ciclo_faro_nocturno.py     → Ciclo completo (4 colores)
+    │   ├── amarillo_dorado.py
+    │   ├── naranja.py
+    │   ├── indigo.py
+    │   └── black.py
+    ├── mujer-azul/
+    │   ├── ciclo_mujer_sombrero.py    → Ciclo completo (5 colores)
+    │   ├── baby_blue.py
+    │   ├── azul_cobalto.py
+    │   ├── purple.py
+    │   ├── lime_green.py
+    │   └── black.py
+    └── tucan-tropical/
+        ├── ciclo_tucan_tropical.py    → Ciclo completo (4 colores)
+        └── tucan tropical/
+            ├── dark_navy.py
+            ├── amber.py
+            ├── green.py
+            └── teal.py
+```
+
+#### Pines GPIO (RPi5 / gpiochip4)
+| Pin | Función |
+|-----|---------|
+| GPIO 2 | STEP — pulsos de movimiento |
+| GPIO 3 | DIR — dirección (0=izquierda, 1=derecha) |
+| GPIO 4 | EN — habilitar motor (0=activo, 1=apagado) |
+| GPIO 5 | LIMIT_MIN — sensor fin de carrera izquierdo |
+| GPIO 6 | LIMIT_MAX — sensor fin de carrera derecho |
+
+#### Posiciones de parada (pasos desde LIMIT_MIN)
+| Posición | Pasos | Descripción |
+|----------|-------|-------------|
+| HOME | 0 | Primera dispensación (sin mover) |
+| Parada 1 | 60,338 | Segundo cubículo |
+| Parada 2 | 129,148 | Tercer cubículo |
+| Parada 3 | 200,036 | Cuarto cubículo |
+| Parada 4 | 263,943 | Quinto cubículo |
+| LIMIT_MAX | ~316,000 | Fin de recorrido |
+
+---
+
+## 📷 RPi4-A — CÁMARA `192.168.0.198`
+
+**Analiza en tiempo real la pintura del estudiante.** Compara el lienzo con la imagen de referencia y envía feedback de precisión al sistema.
+
+La cámara **siempre está encendida** desde que arranca el servicio.
+
+### Servicio
+```bash
+systemctl status pixartek-vision
+journalctl -u pixartek-vision -f    # ver logs en tiempo real
+```
+
+### Código (`nodes/vision/`)
+```
+nodes/vision/
+├── main.py        → Servidor FastAPI — cámara siempre ON al iniciar
+├── pipeline.py    → Análisis de imagen IA (comparación con referencia)
+├── config.py      → Configuración (índice cámara, resolución, intervalos)
+└── camera.py      → Módulo auxiliar de captura
+```
+
+### Hardware
+- **Cámara:** Logitech HD Pro Webcam C920
+- **Dispositivo:** `/dev/video0`
+- **LED:** Siempre encendido mientras el servicio corre
+
+### Endpoints HTTP (puerto 8000)
+| Endpoint | Método | Descripción |
+|----------|--------|-------------|
+| `GET /video_feed` | GET | Stream MJPEG en vivo |
+| `GET /capture` | GET | Foto fija JPEG |
+| `GET /status` | GET | Estado de la cámara y análisis |
+| `POST /reference` | POST | Establecer imagen de referencia |
+| `GET /feedback` | GET | Último resultado de análisis |
+| `POST /camera/on` | POST | Compatibilidad (cámara ya siempre activa) |
+| `POST /camera/off` | POST | Ignorado — cámara permanece activa siempre |
+
+---
+
+## 📽️ RPi4-B — PROYECTOR `192.168.0.192`
+
+**Proyecta las imágenes guía sobre el lienzo del estudiante.** Muestra los contornos y divisiones de cada etapa de la obra directamente sobre el papel/lienzo.
+
+### Servicio
+```bash
+systemctl status pixartek-projection
+```
+
+### Código (`nodes/projection/`)
+```
+nodes/projection/
+├── main.py      → Servidor FastAPI — recibe comandos de proyección
+├── display.py   → Control del display y proyector
+└── config.py    → Resolución y configuración de pantalla
+```
+
+### Endpoints HTTP (puerto 8001)
+| Endpoint | Método | Descripción |
+|----------|--------|-------------|
+| `POST /project` | POST | Proyectar imagen de etapa |
+| `POST /clear` | POST | Apagar proyección (pantalla negra) |
+| `POST /adjust` | POST | Ajustar posición/zoom |
+| `GET /status` | GET | Estado del proyector |
+
+### Imágenes
+Las imágenes guía (contornos para proyectar) están en RPi5:
+```
+frontend/public/artworks/<OBRA>-DIVISIONES/Etapa<N>.png
+```
+RPi5 le dice a RPi4-B qué imagen proyectar vía HTTP.
+
+---
+
+## 🧼 Cleaning — LIMPIEZA `192.168.0.149`
+
+**Estación automática de limpieza de pinceles.** Se activa cuando el estudiante presiona el botón "Limpiar Pincel" en el kiosk.
+
+El backend en RPi5 envía el comando HTTP a esta estación.
+
+---
+
+## 🔌 Flujo de comunicación
+
+```
+Estudiante toca kiosk (RPi5:3000)
+         │
+         ▼
+Backend API (RPi5:8000)
+         ├──► RPi4-A:8000   → /reference (qué analizar)
+         │                  → /feedback  (leer análisis)
+         ├──► RPi4-B:8001   → /project   (qué proyectar)
+         │                  → /clear     (apagar proyección)
+         └──► Cleaning:80   → /clean     (limpiar pincel)
+
+WebSocket (RPi5:8000/ws)
+         └──► Frontend recibe feedback de análisis en tiempo real
+```
+
+---
+
+## 🎨 Obras disponibles
+
+| ID | Título | Colores |
+|----|--------|---------|
+| `flores-blancas` | Flores Blancas | Burnt Sienna → Champagne → Ivory White → Lime Green |
+| `faro-nocturno` | Faro Nocturno | Amarillo Dorado → Naranja → Índigo → Negro |
+| `mujer-sombrero` | Mujer en un Sombrero | Baby Blue → Azul Cobalto → Púrpura → Lima → Negro |
+| `tucan-tropical` | Tucán Tropical | Dark Navy → Ámbar → Verde → Teal |
+
+---
+
+## ⚙️ Variables de entorno
+
+**`backend/.env`**
+```env
+DATABASE_URL=sqlite:///./pixartek.db
+GEMINI_API_KEY=your_key_here
+MQTT_HOST=localhost
+MQTT_PORT=1883
+VISION_NODE_URL=http://192.168.0.198:8000
+PROJECTION_NODE_URL=http://192.168.0.192:8001
+CLEANING_NODE_URL=http://192.168.0.149:80
+```
+
+---
+
+## 🚀 Instalación rápida
+
+### RPi5
+```bash
+# Backend
+cd backend
+pip install -r requirements.txt
+cp .env.example .env  # editar con tus valores
+systemctl enable --now pixartek-backend
+
+# Frontend
+cd frontend
+npm install
+npm run build
+systemctl enable --now pixartek-frontend
+```
+
+### RPi4-A (Cámara)
+```bash
+cd nodes/vision
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+systemctl enable --now pixartek-vision
+```
+
+### RPi4-B (Proyector)
+```bash
+cd nodes/projection
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+systemctl enable --now pixartek-projection
+```

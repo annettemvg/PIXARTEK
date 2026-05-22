@@ -1,0 +1,26 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Frontend (Next.js)",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "frontend",
+      "port": 3000
+    },
+    {
+      "name": "Backend (FastAPI)",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["main.py"],
+      "cwd": "backend",
+      "port": 8000
+    },
+    {
+      "name": "Vision Node (MJPEG + análisis)",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["main.py"],
+      "cwd": "nodes/vision",
+      "port": 8000
+    }
+  ]
+}

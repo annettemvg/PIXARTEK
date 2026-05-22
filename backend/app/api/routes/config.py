@@ -8,8 +8,8 @@ router = APIRouter(prefix="/config", tags=["config"])
 CONFIG_FILE = Path(__file__).parent.parent.parent.parent / "pixartek_config.json"
 
 DEFAULTS = {
-    "mqttHost": "192.168.86.243", "mqttPort": 1883,
-    "rpi5Ip": "192.168.86.243", "rpi4aIp": "192.168.86.244", "rpi4bIp": "192.168.86.245",
+    "mqttHost": "192.168.0.197", "mqttPort": 1883,
+    "rpi5Ip": "192.168.0.197", "rpi4aIp": "192.168.0.198", "rpi4bIp": "192.168.0.192",
     "projectionWidth": 1920, "projectionHeight": 1080, "projectionBrightness": 80,
     "audioEnabled": True, "audioVolume": 70,
     "kioskMode": True, "language": "es",

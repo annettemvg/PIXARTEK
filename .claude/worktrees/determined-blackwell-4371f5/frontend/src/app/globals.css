@@ -1,0 +1,83 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+:root {
+  --color-cream:    #F5F2EE;
+  --color-coral:    #E07B6A;
+  --color-ink:      #1A1818;
+  --color-muted:    #6B6866;
+  --color-border:   #E8E4DE;
+}
+
+/* Smooth rendering */
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  background-color: var(--color-cream);
+  color: var(--color-ink);
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+}
+
+/* Scrollable areas inside the kiosk */
+.scroll-area {
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.scroll-area::-webkit-scrollbar { display: none; }
+
+/* Input reset for kiosk */
+input, textarea {
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+  outline: none;
+}
+
+/* Smooth page transitions */
+@layer utilities {
+  .animate-delay-100 { animation-delay: 100ms; }
+  .animate-delay-200 { animation-delay: 200ms; }
+  .animate-delay-300 { animation-delay: 300ms; }
+  .animate-delay-400 { animation-delay: 400ms; }
+  .animate-delay-500 { animation-delay: 500ms; }
+  .opacity-0-init    { opacity: 0; }
+}
+
+/* Painted-look stroke for inputs */
+.input-painted {
+  background: #fff;
+  border: 2px solid var(--color-border);
+  border-radius: 16px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.input-painted:focus {
+  border-color: var(--color-coral);
+  box-shadow: 0 0 0 4px rgba(224, 123, 106, 0.15);
+}
+
+/* Progress bar fill animation */
+@keyframes fillBar {
+  from { width: 0%; }
+  to   { width: var(--fill-pct); }
+}
+.bar-fill { animation: fillBar 0.6s ease forwards; }
+
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-8px); }
+}
+.dot-bounce { animation: bounce 1.2s ease-in-out infinite; }

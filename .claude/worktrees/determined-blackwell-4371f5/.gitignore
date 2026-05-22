@@ -1,0 +1,64 @@
+# Node
+node_modules/
+.next/
+.env.local
+.env*.local
+.vercel/
+out/
+dist/
+build/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# OS
+.DS_Store
+Thumbs.db
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.env
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# RPI specific
+.ssh/
+*.pem
+private_keys/
+
+# Temp files
+.tmp/
+tmp/
+temp/
+
+# Assets (artwork images managed separately)
+assets/artwork/*.png
+assets/artwork/*.jpg

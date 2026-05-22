@@ -48,7 +48,7 @@ async def create_session(body: CreateSessionRequest, db: AsyncSession = Depends(
     # Trigger projection + vision analysis
     artwork = await db.get(Artwork, body.artwork_id)
     if artwork:
-        await _publish_projection(session, artwork, body.start_stage)
+        await _publish_projection(session, artwork, body.start_stage, db)
         _publish_vision_reference(artwork, body.start_stage)
 
     return _serialize(session)
@@ -77,7 +77,7 @@ async def advance_stage(session_id: str, body: AdvanceStageRequest, db: AsyncSes
     # Update projection with new stage
     artwork = await db.get(Artwork, session.artwork_id)
     if artwork and session.status != "completed":
-        await _publish_projection(session, artwork, body.stage)
+        await _publish_projection(session, artwork, body.stage, db)
         _publish_vision_reference(artwork, body.stage)
 
     return _serialize(session)
@@ -114,21 +114,42 @@ async def get_metrics(session_id: str, db: AsyncSession = Depends(get_db)):
 
 # ── MQTT helpers ──────────────────────────────────────────────────────────────
 
-async def _publish_projection(session: Session, artwork: Artwork, stage: int):
+async def _publish_projection(session: Session, artwork: Artwork, stage: int, db: AsyncSession = None):
     """Publish projection/command so RPi4-A knows what to project."""
+    from app.core.config import settings
+    from app.models.artwork_stage import ArtworkStage
     stages = artwork.stages or []
     stage_data = next((s for s in stages if s.get("number") == stage), {})
 
-    # image_path is the path ON RPi4-A's filesystem
-    image_filename = f"{artwork.id}.jpg"
-    image_path = os.path.join(ASSETS_PATH, image_filename)
+    # Check if a contour (projection) image exists for this stage
+    base_url = f"http://{settings.mqtt_host}:8000"
+    has_proj = False
+    if db is not None:
+        result = await db.execute(
+            select(ArtworkStage)
+            .where(ArtworkStage.artwork_id == artwork.id)
+            .where(ArtworkStage.stage_number == stage)
+        )
+        stage_obj = result.scalar_one_or_none()
+        has_proj = stage_obj is not None and bool(stage_obj.projection_image_path)
 
+    if not has_proj:
+        # No contour image exists for this artwork stage — clear the projector.
+        publish("pixartek/projection/command", {
+            "artwork_id": artwork.id,
+            "stage":      stage,
+            "image_path": "",
+        })
+        return
+
+    image_url = f"{base_url}/api/stages/{artwork.id}/{stage}/projection"
     payload = {
         "session_id":   session.id,
         "artwork_id":   artwork.id,
         "stage":        stage,
         "total_stages": session.total_stages,
-        "image_path":   image_path,
+        "image_path":   image_url,
+        "image_url":    image_url,
         "stage_title":  stage_data.get("title", ""),
         "timestamp":    time.time(),
     }

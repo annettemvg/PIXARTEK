@@ -13,12 +13,17 @@ router = APIRouter(prefix="/stages", tags=["stages"])
 
 # stages.py lives at backend/app/api/routes/stages.py → project root is 5 levels up
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent
+FRONTEND_PUBLIC = PROJECT_ROOT / "frontend" / "public"
 
 
 def _abs(path: str) -> str:
     """Return absolute path — resolve relative paths from project root."""
     p = Path(path)
     if p.is_absolute():
+        # Paths like "/artworks/..." are relative to frontend/public on the server
+        candidate = FRONTEND_PUBLIC / path.lstrip("/")
+        if candidate.exists():
+            return str(candidate)
         return str(p)
     return str(PROJECT_ROOT / p)
 
@@ -101,8 +106,6 @@ async def trigger_projection(artwork_id: str, stage_number: int, request: Reques
         .where(ArtworkStage.stage_number == stage_number)
     )
     stage = result.scalar_one_or_none()
-    if not stage:
-        raise HTTPException(status_code=404, detail="Stage not found")
 
     # Use the Host header if it has a real IP; otherwise fall back to MQTT host
     host = request.headers.get("host", "")
@@ -110,11 +113,21 @@ async def trigger_projection(artwork_id: str, stage_number: int, request: Reques
         from app.core.config import settings
         host = f"{settings.mqtt_host}:8000"
     base_url = f"http://{host}"
-    proj_url = f"{base_url}/api/stages/{artwork_id}/{stage_number}/projection"
 
+    if not stage:
+        # No artwork_stages record = no contour image exists. Clear the projector.
+        publish("pixartek/projection/command", {
+            "artwork_id": artwork_id,
+            "stage":      stage_number,
+            "image_path": "",
+        })
+        return {"ok": True, "stage": stage_number, "projected_url": None, "action": "clear"}
+
+    proj_url = f"{base_url}/api/stages/{artwork_id}/{stage_number}/projection"
     publish("pixartek/projection/command", {
         "artwork_id":  artwork_id,
         "stage":       stage_number,
         "image_path":  proj_url,
+        "image_url":   proj_url,
     })
     return {"ok": True, "stage": stage_number, "projected_url": proj_url}

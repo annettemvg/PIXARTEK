@@ -20,5 +20,6 @@ async def init_db():
     import app.models.artwork       # noqa
     import app.models.session       # noqa
     import app.models.artwork_stage # noqa
+    import app.models.user          # noqa
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

@@ -1,6 +1,6 @@
 import os
 
-MQTT_HOST   = os.getenv("MQTT_HOST",   "192.168.1.10")
+MQTT_HOST   = os.getenv("MQTT_HOST",   "192.168.0.197")
 MQTT_PORT   = int(os.getenv("MQTT_PORT", "1883"))
 NODE_ID     = os.getenv("NODE_ID",     "rpi4-vision")
 DEV_MODE    = os.getenv("DEV_MODE",    "true").lower() == "true"

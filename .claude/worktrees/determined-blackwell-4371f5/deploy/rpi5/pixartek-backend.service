@@ -1,0 +1,18 @@
+[Unit]
+Description=PIXARTEK Backend API (FastAPI)
+After=network.target mosquitto.service
+Wants=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/pixartek/backend
+ExecStart=/home/pi/pixartek/backend/.venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=3
+Environment=DEV_MODE=false
+Environment=MQTT_HOST=localhost
+Environment=DB_URL=sqlite+aiosqlite:////home/pi/pixartek/data/pixartek.db
+
+[Install]
+WantedBy=multi-user.target

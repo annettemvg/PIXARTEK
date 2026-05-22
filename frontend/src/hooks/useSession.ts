@@ -35,9 +35,9 @@ export function useSessionApi() {
     } catch { /* offline — ignore */ }
   }, []);
 
-  const dispense = useCallback(async (slot = 1) => {
+  const dispense = useCallback(async (slot = 1, artworkId = "") => {
     try {
-      await apiDispense(slot);
+      await apiDispense(slot, 500, artworkId);
     } catch { /* offline — ignore */ }
   }, []);
 

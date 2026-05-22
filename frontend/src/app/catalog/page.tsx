@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import ArtworkCard from "@/components/ui/ArtworkCard";
 import PixartekLogo from "@/components/ui/PixartekLogo";
@@ -7,6 +7,7 @@ import { DIFFICULTY_LABEL, DIFFICULTY_COLOR } from "@/lib/mock-artworks";
 import { useArtworks } from "@/hooks/useArtworks";
 import { useProfileStore } from "@/lib/profile-store";
 import { getStageImageUrl, projectStage } from "@/lib/api-client";
+import { useAuthStore } from "@/lib/auth-store";
 import type { Artwork } from "@/types/artwork";
 import { clsx } from "clsx";
 
@@ -23,26 +24,56 @@ export default function CatalogPage() {
   const router = useRouter();
   const { artworks, loading } = useArtworks();
   const { profile } = useProfileStore();
+  const { user, logout } = useAuthStore();
   const [selected, setSelected] = useState<Artwork | null>(null);
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => { setHydrated(true); }, []);
+
+  // Redirigir al sign-in si no hay usuario (solo en cliente)
+  useEffect(() => {
+    if (hydrated && !user) router.replace("/signin");
+  }, [hydrated, user, router]);
   const [selectedStage, setSelectedStage] = useState<number>(1);
   const [filter, setFilter] = useState<Filter>("all");
+  const [projecting, setProjecting] = useState<string | null>(null);
+  const [projError, setProjError] = useState<string | null>(null);
 
   const filtered = filter === "all" ? artworks : artworks.filter(a => a.difficulty === filter);
 
   function handleSelect(artwork: Artwork) {
     setSelected(artwork);
     setSelectedStage(1);
+    // Immediately project stage 1 when an artwork is selected
+    setProjecting(artwork.id);
+    setProjError(null);
+    projectStage(artwork.id, 1)
+      .then(() => {
+        setTimeout(() => setProjecting(null), 2000);
+      })
+      .catch((e: unknown) => {
+        setProjecting(null);
+        const msg = e instanceof Error ? e.message : String(e);
+        setProjError(msg);
+        console.error("Projection failed:", msg);
+        setTimeout(() => setProjError(null), 6000);
+      });
   }
 
   async function handleStart() {
     if (!selected) return;
-    // Project the selected stage on the projector before navigating
+    // Re-project the selected stage before navigating
     try {
       await projectStage(selected.id, selectedStage);
-    } catch {
-      // Projection failure is non-blocking
+    } catch (e) {
+      console.warn("Projection on start failed:", e);
     }
-    router.push(`/session?artwork=${selected.id}&stage=${selectedStage}`);
+    // Special story presentation for mujer-sombrero
+    if (selected.id === "mujer-sombrero") {
+      router.push(`/story?artwork=${selected.id}&stage=${selectedStage}`);
+    } else {
+      router.push(`/session?artwork=${selected.id}&stage=${selectedStage}`);
+    }
   }
 
   return (
@@ -83,10 +114,15 @@ export default function CatalogPage() {
             <div className="h-6 w-px bg-pixartek-border mx-1" />
 
             {/* User chip */}
-            {profile && (
+            {user && (
               <div className="flex items-center gap-2 bg-pixartek-cream border border-pixartek-border rounded-full px-3 py-1.5">
-                <span className="text-lg">{profile.avatar}</span>
-                <span className="font-body font-600 text-sm text-pixartek-ink">{profile.name}</span>
+                {user.picture
+                  ? <img src={user.picture} alt="" className="w-6 h-6 rounded-full object-cover" />
+                  : <span className="w-6 h-6 rounded-full bg-pixartek-coral flex items-center justify-center text-white text-xs font-700">{user.name[0].toUpperCase()}</span>
+                }
+                <span className="font-body font-600 text-sm text-pixartek-ink">{user.name.split(" ")[0]}</span>
+                <button onClick={() => { logout(); router.replace("/signin"); }}
+                  className="text-pixartek-muted hover:text-red-400 transition text-xs ml-1">✕</button>
               </div>
             )}
 
@@ -99,6 +135,20 @@ export default function CatalogPage() {
             </button>
           </div>
         </header>
+
+        {/* Projection status bar */}
+        {(projecting || projError) && (
+          <div className={clsx(
+            "shrink-0 px-8 py-2 text-sm font-body font-600 text-center transition-all",
+            projError
+              ? "bg-red-100 text-red-700 border-b border-red-200"
+              : "bg-teal-50 text-teal-700 border-b border-teal-200"
+          )}>
+            {projError
+              ? `Error de proyeccion: ${projError}`
+              : "Proyectando etapa 1..."}
+          </div>
+        )}
 
         {/* Grid */}
         <div className="flex-1 scroll-area px-8 py-7">
@@ -113,7 +163,6 @@ export default function CatalogPage() {
             </div>
           ) : filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full gap-4 text-pixartek-muted">
-              <span className="text-6xl">🖼</span>
               <p className="font-body text-lg">No hay obras en esta categoría</p>
             </div>
           ) : (
@@ -149,6 +198,14 @@ export default function CatalogPage() {
                   className="absolute inset-0 w-full h-full object-cover"
                   onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                 />
+                {/* Projecting overlay */}
+                {projecting === selected.id && (
+                  <div className="absolute inset-0 bg-teal-500/20 flex items-center justify-center">
+                    <span className="bg-white/90 text-teal-700 text-xs font-body font-700 px-3 py-1 rounded-full">
+                      Proyectando...
+                    </span>
+                  </div>
+                )}
               </div>
 
               <h2 className="font-display font-700 text-xl text-pixartek-ink">{selected.title}</h2>
@@ -162,7 +219,7 @@ export default function CatalogPage() {
                   {DIFFICULTY_LABEL[selected.difficulty]}
                 </span>
                 <span className="text-xs text-pixartek-muted font-body">
-                  🎨 {selected.stages.length} etapas · ⏱ {selected.duration_min} min
+                  {selected.stages.length} etapas · {selected.duration_min} min
                 </span>
               </div>
 
@@ -227,7 +284,7 @@ export default function CatalogPage() {
                       <p className="text-xs text-pixartek-muted font-body line-clamp-2 leading-relaxed">
                         {stage.description}
                       </p>
-                      <p className="text-xs text-pixartek-muted/60 font-body mt-1">⏱ {stage.duration_min} min</p>
+                      <p className="text-xs text-pixartek-muted/60 font-body mt-1">{stage.duration_min} min</p>
                     </div>
                   </button>
                 ))}
@@ -244,7 +301,7 @@ export default function CatalogPage() {
                   hover:opacity-90 active:scale-[0.99] transition-all duration-150
                 "
               >
-                ¡Pintar ahora! →
+                Pintar ahora →
               </button>
               <p className="text-xs text-pixartek-muted font-body text-center mt-2">
                 Etapa {selectedStage} de {selected.stages.length} · {selected.stages[selectedStage - 1]?.duration_min} min estimados
@@ -253,7 +310,6 @@ export default function CatalogPage() {
           </>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-pixartek-muted px-8 text-center gap-4">
-            <span className="text-7xl">🎨</span>
             <p className="font-display font-600 text-lg text-pixartek-ink">Elige una obra</p>
             <p className="font-body text-sm leading-relaxed">
               Selecciona cualquier pintura del catálogo para ver sus etapas y comenzar a pintar

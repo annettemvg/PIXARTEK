@@ -161,6 +161,15 @@ export default function SettingsPage() {
                   ))}
                 </div>
               </div>
+
+              <div className="mt-4">
+                <button
+                  onClick={() => router.push("/projection")}
+                  className="w-full py-4 rounded-2xl bg-pixartek-coral font-display font-700 text-white text-base shadow-btn hover:opacity-90 transition"
+                >
+                  🎯 Ajustar Posición y Zoom →
+                </button>
+              </div>
             </section>
           )}
 

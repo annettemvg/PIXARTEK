@@ -2,7 +2,7 @@
 const BASE = typeof window !== "undefined"
   ? `http://${window.location.hostname}:8000`
   : (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000");
-const TIMEOUT_MS = 3000;
+const TIMEOUT_MS = 10000;
 
 export function getApiBase(): string {
   return typeof window !== "undefined"
@@ -84,8 +84,8 @@ export async function recordMetric(sessionId: string, data: {
 }
 
 // ── Hardware ──────────────────────────────────────────
-export async function apiDispense(slot = 1, duration_ms = 500) {
-  return post("/api/hardware/dispense", { pigment_slot: slot, duration_ms });
+export async function apiDispense(slot = 1, duration_ms = 500, artwork_id = "") {
+  return post("/api/hardware/dispense", { pigment_slot: slot, duration_ms, artwork_id });
 }
 
 export async function apiClean() {
@@ -102,11 +102,37 @@ export async function fetchStages(artworkId: string) {
 }
 
 export async function projectStage(artworkId: string, stageNumber: number): Promise<void> {
-  try {
-    await post(`/api/stages/${artworkId}/${stageNumber}/project`, {});
-  } catch (e) {
-    console.warn("Projection command failed:", e);
-  }
+  // NOTE: do NOT catch here — let the caller handle errors so they are visible
+  await post(`/api/stages/${artworkId}/${stageNumber}/project`, {});
+}
+
+// ── Projection controls ───────────────────────────────
+export type ProjectionAction = "up" | "down" | "left" | "right" | "zoom_in" | "zoom_out" | "rotate_left" | "rotate_right" | "reset";
+
+export async function adjustProjection(action: ProjectionAction): Promise<void> {
+  await post("/api/projection/adjust", { action });
+}
+
+export async function setProjectionAngle(angle: number): Promise<void> {
+  await post("/api/projection/angle", { angle });
+}
+
+// ── Monitor de visión (Pixi) ──────────────────────────
+export async function startMonitor(data: {
+  artwork_title: string;
+  artwork_artist?: string;
+  stage_title: string;
+  stage_number: number;
+}): Promise<void> {
+  try { await post("/api/chat/monitor/start", data); } catch {}
+}
+
+export async function stopMonitor(): Promise<void> {
+  try { await post("/api/chat/monitor/stop", {}); } catch {}
+}
+
+export async function updateMonitorStage(data: { stage_title: string; stage_number: number }): Promise<void> {
+  try { await post("/api/chat/monitor/stage", data); } catch {}
 }
 
 // ── Health ────────────────────────────────────────────
